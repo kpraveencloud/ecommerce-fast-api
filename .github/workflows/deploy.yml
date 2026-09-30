@@ -48,7 +48,7 @@ jobs:
     env:
       GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
       GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
-      GKE_LOCATION: us-central1
+      GKE_ZONE: ${{ secrets.GKE_ZONE }}
       NAMESPACE: ${{ inputs.environment }}
       IMAGE_TAG: ${{ inputs.image_tag }}
       REGISTRY: ${{ inputs.registry_url || secrets.GCP_REGISTRY_URL }}
@@ -115,7 +115,7 @@ jobs:
           set -euo pipefail
           gke-gcloud-auth-plugin --version
           gcloud container clusters get-credentials "$GKE_CLUSTER_NAME" \
-            --location="$GKE_LOCATION" \
+            --zone="$GKE_ZONE" \
             --project="$GCP_PROJECT_ID"
           kubectl config current-context
           kubectl version --request-timeout=30s
@@ -220,7 +220,7 @@ jobs:
             printf '\n- Environment: `%s`\n' "$NAMESPACE"
             printf -- '- Image: `%s:%s`\n' "$IMAGE_REPOSITORY" "$IMAGE_TAG"
             printf -- '- Cluster: `%s`\n' "$GKE_CLUSTER_NAME"
-            printf -- '- Location: `%s`\n' "$GKE_LOCATION"
+            printf -- '- Zone: `%s`\n' "$GKE_ZONE"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Failure diagnostics
