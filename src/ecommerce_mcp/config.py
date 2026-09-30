@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     # Backend API
-    fastapi_base_url: str = "http://localhost:8000"
+    fastapi_base_url: str = "http://localhost:8003"
 
     # Retry & Resilience
     max_retries: int = 3

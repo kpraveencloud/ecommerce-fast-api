@@ -1,0 +1,22 @@
+apiVersion: v2
+name: ecommerce-api
+description: Helm chart for FastAPI Ecommerce API Service
+type: application
+
+version: 1.0.0
+appVersion: "0.1.0"
+
+keywords:
+  - ecommerce
+  - fastapi
+  - kubernetes
+  - helm
+  - api
+
+home: https://github.com/yourusername/ecommerce-fast-api
+sources:
+  - https://github.com/yourusername/ecommerce-fast-api
+
+maintainers:
+  - name: Development Team
+    email: dev@example.com
