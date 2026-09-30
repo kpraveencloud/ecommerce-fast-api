@@ -127,17 +127,22 @@ jobs:
         with:
           version: latest
 
-      - name: Lint chart and deploy existing image
+      - name: Create application secret
         env:
           APP_SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
           set -euo pipefail
           : "${APP_SECRET_KEY:?Add SECRET_KEY to the selected GitHub environment}"
 
-          umask 077
-          SECRET_FILE="$(mktemp)"
-          trap 'rm -f "$SECRET_FILE"' EXIT
-          printf '%s' "$APP_SECRET_KEY" > "$SECRET_FILE"
+          kubectl create secret generic ecommerce-mcp-secrets \
+            --from-literal=SECRET_KEY="$APP_SECRET_KEY" \
+            --namespace "$NAMESPACE" \
+            --dry-run=client \
+            -o yaml | kubectl apply -f -
+
+      - name: Lint chart and deploy existing image
+        run: |
+          set -euo pipefail
 
           VALUES_ARGS=(--values "$CHART_PATH/values.yaml")
           if [[ "$NAMESPACE" == prod ]]; then
@@ -147,8 +152,6 @@ jobs:
           OVERRIDE_ARGS=(
             --set-string "image.repository=$IMAGE_REPOSITORY"
             --set-string "image.tag=$IMAGE_TAG"
-            --set-string "secrets[0].name=SECRET_KEY"
-            --set-file "secrets[0].valueFrom=$SECRET_FILE"
           )
 
           helm lint "$CHART_PATH" \

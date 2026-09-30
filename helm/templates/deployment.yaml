@@ -48,11 +48,11 @@ spec:
         - name: {{ $key }}
           value: {{ $value | quote }}
         {{- end }}
-        {{- range .Values.secrets }}
-        - name: {{ .name }}
+        - name: SECRET_KEY
           valueFrom:
-            {{- toYaml .valueFrom | nindent 12 }}
-        {{- end }}
+            secretKeyRef:
+              name: ecommerce-mcp-secrets
+              key: SECRET_KEY
         livenessProbe:
           httpGet:
             path: /health
