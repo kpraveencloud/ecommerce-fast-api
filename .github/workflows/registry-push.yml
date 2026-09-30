@@ -4,93 +4,130 @@ on:
   workflow_dispatch:
     inputs:
       image_tag:
-        description: 'Image tag (e.g., latest, v1.0.0, dev)'
+        description: Image tag (for example, 1.0.1)
         required: true
-        default: 'latest'
+        default: '1.0.1'
         type: string
       image_name:
-        description: 'Image name (e.g., ecommerce-api)'
+        description: Image name; empty uses DOCKER_IMAGE_NAME
         required: false
         default: ''
         type: string
       registry_url:
-        description: 'Registry URL (e.g., gcr.io/my-project, leave empty to use secrets)'
+        description: Registry path; empty uses GCP_REGISTRY_URL
         required: false
         default: ''
         type: string
+
   push:
     branches:
       - main
     tags:
-      - v*
+      - 'v*'
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     permissions:
       contents: read
       id-token: write
 
+    defaults:
+      run:
+        shell: bash
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate image settings
+        env:
+          REGISTRY: ${{ inputs.registry_url || secrets.GCP_REGISTRY_URL }}
+          IMAGE_NAME: ${{ inputs.image_name || secrets.DOCKER_IMAGE_NAME }}
+          IMAGE_TAG: ${{ inputs.image_tag || 'latest' }}
+          PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+
+          : "${PROJECT_ID:?Set GCP_PROJECT_ID}"
+          : "${REGISTRY:?Set GCP_REGISTRY_URL or registry_url}"
+          : "${IMAGE_NAME:?Set DOCKER_IMAGE_NAME or image_name}"
+
+          REGISTRY="${REGISTRY%/}"
+
+          if [[ ! "$REGISTRY" =~ ^[a-z0-9.-]+/[a-z0-9._/-]+$ ]]; then
+            echo "::error::Use a registry/project/repository path without https://"
+            exit 1
+          fi
+
+          if [[ ! "$IMAGE_NAME" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo "::error::Use a lowercase image name such as ecommerce-backend"
+            exit 1
+          fi
+
+          if [[ "$GITHUB_EVENT_NAME" == push && "$GITHUB_REF" == refs/tags/* ]]; then
+            IMAGE_TAG="$GITHUB_REF_NAME"
+          fi
+
+          if [[ ! "$IMAGE_TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Invalid Docker image tag"
+            exit 1
+          fi
+
+          {
+            printf 'IMAGE_URI=%s/%s\n' "$REGISTRY" "$IMAGE_NAME"
+            printf 'IMAGE_TAG=%s\n' "$IMAGE_TAG"
+            printf 'REGISTRY_HOST=%s\n' "${REGISTRY%%/*}"
+          } >> "$GITHUB_ENV"
+
+      - name: Exclude Google credentials from Docker build
+        run: |
+          set -euo pipefail
+          printf '\ngha-creds-*.json\n**/gha-creds-*.json\n' >> .dockerignore
+          if [[ -f Dockerfile.dockerignore ]]; then
+            printf '\ngha-creds-*.json\n**/gha-creds-*.json\n' >> Dockerfile.dockerignore
+          fi
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
+        uses: google-github-actions/setup-gcloud@v3
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker "$REGISTRY_HOST" --quiet
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker ${{ secrets.GCP_REGISTRY_URL }}
-
-      - name: Extract metadata
-        id: meta
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION=${{ github.event.inputs.image_tag }}
-          elif [[ $GITHUB_REF == refs/tags/v* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/}
-          else
-            VERSION=latest
-          fi
-
-          # Use provided registry_url or fall back to secrets
-          if [[ -n "${{ github.event.inputs.registry_url }}" ]]; then
-            REGISTRY="${{ github.event.inputs.registry_url }}"
-          else
-            REGISTRY="${{ secrets.GCP_REGISTRY_URL }}"
-          fi
-
-          # Use provided image_name or fall back to secrets
-          if [[ -n "${{ github.event.inputs.image_name }}" ]]; then
-            IMAGE_NAME="${{ github.event.inputs.image_name }}"
-          else
-            IMAGE_NAME="${{ secrets.DOCKER_IMAGE_NAME }}"
-          fi
-
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "image=${REGISTRY}/${IMAGE_NAME}" >> $GITHUB_OUTPUT
-          echo "registry=${REGISTRY}" >> $GITHUB_OUTPUT
-          echo "image_name=${IMAGE_NAME}" >> $GITHUB_OUTPUT
+        uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v4
+        id: build
+        uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile
           push: true
           tags: |
-            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}
-            ${{ steps.meta.outputs.image }}:latest
+            ${{ env.IMAGE_URI }}:${{ env.IMAGE_TAG }}
+            ${{ env.IMAGE_URI }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Image digest
-        run: echo "Image pushed: ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.version }}"
+      - name: Image summary
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          echo "Image pushed: $IMAGE_URI:$IMAGE_TAG"
+          {
+            echo '### Image pushed successfully'
+            printf '\n- Image: `%s:%s`\n' "$IMAGE_URI" "$IMAGE_TAG"
+            printf -- '- Digest: `%s`\n' "$IMAGE_DIGEST"
+          } >> "$GITHUB_STEP_SUMMARY"
