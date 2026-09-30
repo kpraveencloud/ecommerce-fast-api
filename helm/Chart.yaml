@@ -1,21 +1,22 @@
 apiVersion: v2
-name: ecommerce-api
-description: Helm chart for FastAPI Ecommerce API Service
+name: ecommerce-mcp
+description: Helm chart for Ecommerce MCP Server (FastAPI Backend Client)
 type: application
+icon: https://fastapi.tiangolo.com/img/logo-margin/logo-teal.png
 
 version: 1.0.0
 appVersion: "0.1.0"
 
 keywords:
   - ecommerce
+  - mcp
   - fastapi
   - kubernetes
   - helm
-  - api
 
-home: https://github.com/yourusername/ecommerce-fast-api
+home: https://github.com/yourusername/ecommerce-mcp
 sources:
-  - https://github.com/yourusername/ecommerce-fast-api
+  - https://github.com/yourusername/ecommerce-mcp
 
 maintainers:
   - name: Development Team

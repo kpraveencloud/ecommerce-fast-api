@@ -1,4 +1,4 @@
-"""Serve the ecommerce MCP protocol and existing REST endpoints on port 8005."""
+"""Serve the ecommerce MCP protocol and existing REST endpoints."""
 
 from typing import Any, Dict
 
@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 
 from src.ecommerce_mcp.main import mcp
+from src.ecommerce_mcp.config import settings
 
 
 # Create the Streamable HTTP MCP endpoint and initialize its session manager
@@ -23,6 +24,12 @@ app = FastAPI(
 async def health():
     """Health check endpoint."""
     return {"status": "ok", "message": "Ecommerce MCP HTTP Server is running"}
+
+
+@app.get("/ready")
+async def ready():
+    """Readiness check endpoint."""
+    return {"status": "ready", "message": "Ecommerce MCP HTTP Server is ready to serve requests"}
 
 
 @app.get("/tools")
@@ -78,4 +85,4 @@ app.mount("/", mcp_http_app)
 
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8005)
+    uvicorn.run(app, host="0.0.0.0", port=settings.port)

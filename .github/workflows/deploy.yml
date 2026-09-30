@@ -4,146 +4,229 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Target environment'
+        description: Target environment
         required: true
-        default: 'dev'
+        default: dev
         type: choice
         options:
           - dev
           - prod
       image_tag:
-        description: 'Image tag to deploy (e.g., latest, v1.0.0)'
+        description: Existing image tag to deploy (for example, 1.0.0)
         required: true
-        default: 'latest'
+        default: '1.0.0'
         type: string
       image_name:
-        description: 'Image name (leave empty to use secrets)'
+        description: Image name; empty uses DOCKER_IMAGE_NAME
         required: false
         default: ''
         type: string
       registry_url:
-        description: 'Registry URL (leave empty to use secrets)'
+        description: Registry path; empty uses GCP_REGISTRY_URL
         required: false
         default: ''
         type: string
 
+concurrency:
+  group: deploy-ecommerce-mcp-${{ inputs.environment }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: ${{ github.event.inputs.environment }}
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
 
     permissions:
       contents: read
       id-token: write
 
-    steps:
-      - uses: actions/checkout@v4
+    defaults:
+      run:
+        shell: bash
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GKE_CLUSTER_NAME: ${{ secrets.GKE_CLUSTER_NAME }}
+      GKE_LOCATION: us-central1
+      NAMESPACE: ${{ inputs.environment }}
+      IMAGE_TAG: ${{ inputs.image_tag }}
+      REGISTRY: ${{ inputs.registry_url || secrets.GCP_REGISTRY_URL }}
+      IMAGE_NAME: ${{ inputs.image_name || secrets.DOCKER_IMAGE_NAME }}
+      RELEASE_NAME: ecommerce-mcp
+      DEPLOYMENT_NAME: ecommerce-mcp
+      SERVICE_NAME: ecommerce-mcp
+      SERVICE_PORT: '80'
+      CHART_PATH: ./helm
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate deployment settings
+        run: |
+          set -euo pipefail
+          : "${GCP_PROJECT_ID:?Set GCP_PROJECT_ID in GitHub secrets}"
+          : "${GKE_CLUSTER_NAME:?Set GKE_CLUSTER_NAME in GitHub secrets}"
+          : "${REGISTRY:?Set GCP_REGISTRY_URL or registry_url}"
+          : "${IMAGE_NAME:?Set DOCKER_IMAGE_NAME or image_name}"
+          [[ "$NAMESPACE" == dev || "$NAMESPACE" == prod ]] || {
+            echo "::error::Environment must be dev or prod"; exit 1;
+          }
+          REGISTRY="${REGISTRY%/}"
+          if [[ ! "$REGISTRY" =~ ^[a-z0-9.-]+/[a-z0-9._/-]+$ ]]; then
+            echo "::error::Use a registry/project/repository path without https://"
+            exit 1
+          fi
+          if [[ ! "$IMAGE_NAME" =~ ^[a-z0-9]+([._-][a-z0-9]+)*$ ]]; then
+            echo "::error::Use a lowercase image name, such as ecommerce-mcp"
+            exit 1
+          fi
+          if [[ ! "$IMAGE_TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]; then
+            echo "::error::Invalid Docker image tag"
+            exit 1
+          fi
+          test -f "$CHART_PATH/Chart.yaml"
+          test -f "$CHART_PATH/values.yaml"
+          DEPLOY_TIMEOUT=5m
+          if [[ "$NAMESPACE" == prod ]]; then
+            test -f "$CHART_PATH/values-prod.yaml"
+            DEPLOY_TIMEOUT=10m
+          fi
+          {
+            printf 'IMAGE_REPOSITORY=%s/%s\n' "$REGISTRY" "$IMAGE_NAME"
+            printf 'DEPLOY_TIMEOUT=%s\n' "$DEPLOY_TIMEOUT"
+          } >> "$GITHUB_ENV"
 
       - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v1
+        uses: google-github-actions/auth@v3
         with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
           credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK and GKE plugin
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'gke-gcloud-auth-plugin'
 
       - name: Get GKE credentials
         run: |
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER_NAME }} \
-            --zone ${{ secrets.GKE_ZONE }} \
-            --project ${{ secrets.GCP_PROJECT_ID }}
+          set -euo pipefail
+          gke-gcloud-auth-plugin --version
+          gcloud container clusters get-credentials "$GKE_CLUSTER_NAME" \
+            --location="$GKE_LOCATION" \
+            --project="$GCP_PROJECT_ID"
+          kubectl config current-context
+          kubectl version --request-timeout=30s
 
       - name: Set up Helm
-        uses: azure/setup-helm@v3
+        uses: azure/setup-helm@v5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         with:
           version: latest
 
-      - name: Verify deployment target
+      - name: Lint chart and deploy existing image
+        env:
+          APP_SECRET_KEY: ${{ secrets.SECRET_KEY }}
         run: |
-          echo "🚀 Deploying to: ${{ github.event.inputs.environment }}"
-          echo "Image tag: ${{ github.event.inputs.image_tag }}"
-          kubectl config current-context
-          kubectl get nodes
+          set -euo pipefail
+          : "${APP_SECRET_KEY:?Add SECRET_KEY to the selected GitHub environment}"
 
-      - name: Update Helm repositories
-        run: helm repo add ecommerce-repo ${{ secrets.GCP_REGISTRY_URL }} || true
+          umask 077
+          SECRET_FILE="$(mktemp)"
+          trap 'rm -f "$SECRET_FILE"' EXIT
+          printf '%s' "$APP_SECRET_KEY" > "$SECRET_FILE"
 
-      - name: Lint Helm chart
-        run: helm lint ./helm
-
-      - name: Deploy/Update Helm release
-        run: |
-          # Use provided registry/image or fall back to secrets
-          REGISTRY="${{ github.event.inputs.registry_url || secrets.GCP_REGISTRY_URL }}"
-          IMAGE_NAME="${{ github.event.inputs.image_name || secrets.DOCKER_IMAGE_NAME }}"
-
-          # Set namespace and values based on environment
-          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
-            NAMESPACE="prod"
-            VALUES="helm/values.yaml helm/values-prod.yaml"
-            TIMEOUT="10m"
-          else
-            NAMESPACE="dev"
-            VALUES="helm/values.yaml"
-            TIMEOUT="5m"
+          VALUES_ARGS=(--values "$CHART_PATH/values.yaml")
+          if [[ "$NAMESPACE" == prod ]]; then
+            VALUES_ARGS+=(--values "$CHART_PATH/values-prod.yaml")
           fi
 
-          helm upgrade --install ecommerce-api ./helm \
-            --namespace ${NAMESPACE} \
+          OVERRIDE_ARGS=(
+            --set-string "image.repository=$IMAGE_REPOSITORY"
+            --set-string "image.tag=$IMAGE_TAG"
+            --set-string "secrets[0].name=SECRET_KEY"
+            --set-file "secrets[0].valueFrom=$SECRET_FILE"
+          )
+
+          helm lint "$CHART_PATH" \
+            "${VALUES_ARGS[@]}" \
+            "${OVERRIDE_ARGS[@]}"
+
+          helm upgrade --install "$RELEASE_NAME" "$CHART_PATH" \
+            --namespace "$NAMESPACE" \
             --create-namespace \
-            --values ${VALUES} \
-            --set image.tag=${{ github.event.inputs.image_tag }} \
-            --set image.repository=${REGISTRY}/${IMAGE_NAME} \
+            "${VALUES_ARGS[@]}" \
+            "${OVERRIDE_ARGS[@]}" \
             --wait \
-            --timeout ${TIMEOUT}
+            --timeout "$DEPLOY_TIMEOUT"
 
       - name: Verify deployment
         run: |
-          NAMESPACE="${{ github.event.inputs.environment }}"
+          set -euo pipefail
+          kubectl rollout status "deployment/$DEPLOYMENT_NAME" \
+            --namespace "$NAMESPACE" --timeout="$DEPLOY_TIMEOUT"
+          kubectl get deployment "$DEPLOYMENT_NAME" --namespace "$NAMESPACE"
+          kubectl get service "$SERVICE_NAME" --namespace "$NAMESPACE"
 
-          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
-            TIMEOUT="10m"
-          else
-            TIMEOUT="5m"
+      - name: Health checks
+        run: |
+          set -euo pipefail
+          PF_LOG="$RUNNER_TEMP/ecommerce-mcp-port-forward.log"
+          kubectl port-forward --namespace "$NAMESPACE" \
+            "service/$SERVICE_NAME" "18000:$SERVICE_PORT" > "$PF_LOG" 2>&1 &
+          PF_PID=$!
+          trap 'kill "$PF_PID" 2>/dev/null || true' EXIT
+          HEALTHY=false
+          for attempt in {1..30}; do
+            if ! kill -0 "$PF_PID" 2>/dev/null; then
+              cat "$PF_LOG"
+              exit 1
+            fi
+            if curl --fail --silent --show-error --max-time 5 \
+              http://127.0.0.1:18000/health; then
+              HEALTHY=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ "$HEALTHY" != true ]]; then
+            echo "::error::Health check failed"
+            cat "$PF_LOG"
+            exit 1
+          fi
+          if [[ "$NAMESPACE" == prod ]]; then
+            curl --fail --silent --show-error --max-time 10 \
+              --retry 5 --retry-delay 2 --retry-all-errors \
+              http://127.0.0.1:18000/ready
           fi
 
-          kubectl rollout status deployment/ecommerce-api -n ${NAMESPACE} --timeout=${TIMEOUT}
-          kubectl get all -n ${NAMESPACE} -l app.kubernetes.io/name=ecommerce-api
-
-      - name: Health check
+      - name: Annotate production deployment
+        if: inputs.environment == 'prod'
         run: |
-          NAMESPACE="${{ github.event.inputs.environment }}"
-
-          echo "🏥 Running health checks on ${NAMESPACE}..."
-          kubectl port-forward -n ${NAMESPACE} svc/ecommerce-api 8000:80 &
-          sleep 5
-
-          # Health probe
-          curl -f http://localhost:8000/health || exit 1
-
-          # Readiness probe (if prod, run full checks)
-          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
-            curl -f http://localhost:8000/ready || exit 1
-            echo "✅ All health checks passed"
-          else
-            echo "✅ Health check passed"
-          fi
-
-      - name: Create deployment annotation
-        if: github.event.inputs.environment == 'prod'
-        run: |
-          kubectl annotate deployment/ecommerce-api \
-            -n prod \
-            deployment.kubernetes.io/image-tag="${{ github.event.inputs.image_tag }}" \
-            deployed-by="github-actions" \
-            deployment-time="$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
+          kubectl annotate "deployment/$DEPLOYMENT_NAME" \
+            --namespace "$NAMESPACE" \
+            "deployment.kubernetes.io/image-tag=$IMAGE_TAG" \
+            deployed-by=github-actions \
+            "deployment-time=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" \
             --overwrite
 
-      - name: Notify deployment
+      - name: Deployment summary
         run: |
-          echo "✅ Deployment to ${{ github.event.inputs.environment }} completed"
-          echo "Image tag: ${{ github.event.inputs.image_tag }}"
-          echo "Namespace: ${{ github.event.inputs.environment }}"
-          echo "Status: kubectl rollout status deployment/ecommerce-api -n ${{ github.event.inputs.environment }}"
+          {
+            echo '### Deployment completed'
+            printf '\n- Environment: `%s`\n' "$NAMESPACE"
+            printf -- '- Image: `%s:%s`\n' "$IMAGE_REPOSITORY" "$IMAGE_TAG"
+            printf -- '- Cluster: `%s`\n' "$GKE_CLUSTER_NAME"
+            printf -- '- Location: `%s`\n' "$GKE_LOCATION"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Failure diagnostics
+        if: failure()
+        continue-on-error: true
+        run: |
+          kubectl get pods --namespace "$NAMESPACE" --request-timeout=15s || true
+          kubectl get events --namespace "$NAMESPACE" \
+            --sort-by=.metadata.creationTimestamp --request-timeout=15s || true
