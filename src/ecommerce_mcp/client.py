@@ -1,21 +1,21 @@
-import httpx
 import asyncio
+import json
 import logging
 import time
-import json
-from typing import Optional, Dict, Any
-from functools import wraps
-from datetime import datetime, timedelta
+from typing import Any
+
+import httpx
+
 from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils.error_handler import (
+    ClientError,
+    ConflictError,
     EcommerceMCPError,
     NotFoundError,
-    ConflictError,
     RateLimitError,
-    TimeoutError,
-    ServiceUnavailableError,
-    ClientError,
     ServerError,
+    ServiceUnavailableError,
+    TimeoutError,
 )
 
 logger = logging.getLogger(__name__)
@@ -25,10 +25,10 @@ class CacheManager:
     """TTL-based in-memory cache for API responses."""
 
     def __init__(self, ttl_seconds: int = settings.cache_ttl):
-        self.cache: Dict[str, tuple[Any, float]] = {}
+        self.cache: dict[str, tuple[Any, float]] = {}
         self.ttl = ttl_seconds
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """Retrieve cached value if not expired."""
         if key in self.cache:
             value, expiry = self.cache[key]
@@ -58,7 +58,7 @@ class RequestDeduplicator:
     """Prevent duplicate concurrent requests."""
 
     def __init__(self):
-        self._pending: Dict[str, asyncio.Task] = {}
+        self._pending: dict[str, asyncio.Task] = {}
 
     async def deduplicate(self, key: str, coro):
         """Execute coro or return existing task if same request is in-flight."""
@@ -105,7 +105,9 @@ class EcommerceMCPClient:
         logger.debug(f"Backoff attempt {attempt + 1}: sleeping {delay}s")
         await asyncio.sleep(delay)
 
-    def _make_cache_key(self, method: str, endpoint: str, params: Optional[dict] = None) -> str:
+    def _make_cache_key(
+        self, method: str, endpoint: str, params: dict | None = None
+    ) -> str:
         """Generate cache key for request."""
         params_str = json.dumps(params or {}, sort_keys=True, default=str)
         return f"{method}:{endpoint}:{params_str}"
@@ -154,9 +156,9 @@ class EcommerceMCPClient:
     async def get(
         self,
         endpoint: str,
-        params: Optional[dict] = None,
+        params: dict | None = None,
         cache: bool = True,
-        timeout: Optional[int] = None,
+        timeout: int | None = None,
     ) -> dict:
         """GET request with caching and retries."""
         cache_key = self._make_cache_key("GET", endpoint, params) if cache else None
@@ -180,7 +182,7 @@ class EcommerceMCPClient:
                         self.cache.set(cache_key, result)
 
                     return result
-                except (TimeoutError, ServiceUnavailableError) as e:
+                except TimeoutError, ServiceUnavailableError:
                     if attempt < self.max_retries - 1:
                         await self._backoff(attempt)
                         continue
@@ -189,19 +191,21 @@ class EcommerceMCPClient:
                     if attempt < self.max_retries - 1:
                         await self._backoff(attempt)
                         continue
-                    raise TimeoutError(f"Request timeout after {self.max_retries} attempts")
+                    raise TimeoutError(
+                        f"Request timeout after {self.max_retries} attempts"
+                    )
                 except httpx.ConnectError as e:
                     if attempt < self.max_retries - 1:
                         await self._backoff(attempt)
                         continue
-                    raise ServiceUnavailableError(f"Connection error: {str(e)}")
+                    raise ServiceUnavailableError(f"Connection error: {e!s}")
 
         return await self.deduplicator.deduplicate(
             self._make_cache_key("GET", endpoint, params), _do_get()
         )
 
     async def post(
-        self, endpoint: str, data: Optional[dict] = None, timeout: Optional[int] = None
+        self, endpoint: str, data: dict | None = None, timeout: int | None = None
     ) -> dict:
         """POST request with retries."""
         for attempt in range(self.max_retries):
@@ -212,7 +216,7 @@ class EcommerceMCPClient:
                     timeout=timeout or settings.request_timeout,
                 )
                 return await self._handle_response(response, endpoint)
-            except (TimeoutError, ServiceUnavailableError):
+            except TimeoutError, ServiceUnavailableError:
                 if attempt < self.max_retries - 1:
                     await self._backoff(attempt)
                     continue
@@ -226,10 +230,10 @@ class EcommerceMCPClient:
                 if attempt < self.max_retries - 1:
                     await self._backoff(attempt)
                     continue
-                raise ServiceUnavailableError(f"Connection error: {str(e)}")
+                raise ServiceUnavailableError(f"Connection error: {e!s}")
 
     async def put(
-        self, endpoint: str, data: Optional[dict] = None, timeout: Optional[int] = None
+        self, endpoint: str, data: dict | None = None, timeout: int | None = None
     ) -> dict:
         """PUT request with retries."""
         for attempt in range(self.max_retries):
@@ -240,7 +244,7 @@ class EcommerceMCPClient:
                     timeout=timeout or settings.request_timeout,
                 )
                 return await self._handle_response(response, endpoint)
-            except (TimeoutError, ServiceUnavailableError):
+            except TimeoutError, ServiceUnavailableError:
                 if attempt < self.max_retries - 1:
                     await self._backoff(attempt)
                     continue
@@ -254,11 +258,9 @@ class EcommerceMCPClient:
                 if attempt < self.max_retries - 1:
                     await self._backoff(attempt)
                     continue
-                raise ServiceUnavailableError(f"Connection error: {str(e)}")
+                raise ServiceUnavailableError(f"Connection error: {e!s}")
 
-    async def delete(
-        self, endpoint: str, timeout: Optional[int] = None
-    ) -> dict:
+    async def delete(self, endpoint: str, timeout: int | None = None) -> dict:
         """DELETE request with retries."""
         for attempt in range(self.max_retries):
             try:
@@ -267,7 +269,7 @@ class EcommerceMCPClient:
                     timeout=timeout or settings.request_timeout,
                 )
                 return await self._handle_response(response, endpoint)
-            except (TimeoutError, ServiceUnavailableError):
+            except TimeoutError, ServiceUnavailableError:
                 if attempt < self.max_retries - 1:
                     await self._backoff(attempt)
                     continue
@@ -281,7 +283,7 @@ class EcommerceMCPClient:
                 if attempt < self.max_retries - 1:
                     await self._backoff(attempt)
                     continue
-                raise ServiceUnavailableError(f"Connection error: {str(e)}")
+                raise ServiceUnavailableError(f"Connection error: {e!s}")
 
     async def close(self) -> None:
         """Close HTTP client session."""

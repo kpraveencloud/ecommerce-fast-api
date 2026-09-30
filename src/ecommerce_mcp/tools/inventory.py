@@ -1,17 +1,15 @@
 """Inventory and warehouse management tools."""
 
 import logging
-from typing import Optional
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
     StockAdjustmentSchema,
     ValidationError,
-    InventoryError,
-    format_success_response,
-    format_paginated_response,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +19,7 @@ inventory_mcp = FastMCP(name="Inventory Tools")
 @inventory_mcp.tool
 async def get_product_stock(
     product_id: int,
-    warehouse_id: Optional[str] = None,
+    warehouse_id: str | None = None,
 ) -> dict:
     """Retrieve stock information for a product.
 
@@ -39,7 +37,9 @@ async def get_product_stock(
         NotFoundError: If product not found
     """
     if not settings.feature_inventory:
-        raise ValidationError("Inventory feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Inventory feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate inputs
     if not isinstance(product_id, int) or product_id <= 0:
@@ -61,15 +61,15 @@ async def get_product_stock(
         logger.info(f"Product stock retrieved: product_id={product_id}")
         return result
     except Exception as e:
-        logger.error(f"Failed to get stock for product {product_id}: {str(e)}")
+        logger.error(f"Failed to get stock for product {product_id}: {e!s}")
         raise
 
 
 @inventory_mcp.tool
 async def list_inventory(
-    warehouse_id: Optional[str] = None,
-    status: Optional[str] = None,
-    category: Optional[str] = None,
+    warehouse_id: str | None = None,
+    status: str | None = None,
+    category: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict:
@@ -90,7 +90,9 @@ async def list_inventory(
         ValidationError: If input validation fails
     """
     if not settings.feature_inventory:
-        raise ValidationError("Inventory feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Inventory feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate pagination
     if limit < 1 or limit > 500:
@@ -125,7 +127,7 @@ async def list_inventory(
         logger.info(f"Inventory listed: {len(result.get('data', []))} items")
         return result
     except Exception as e:
-        logger.error(f"Failed to list inventory: {str(e)}")
+        logger.error(f"Failed to list inventory: {e!s}")
         raise
 
 
@@ -135,8 +137,8 @@ async def adjust_stock(
     warehouse_id: str,
     quantity_change: int,
     reason: str,
-    reference_id: Optional[str] = None,
-    notes: Optional[str] = None,
+    reference_id: str | None = None,
+    notes: str | None = None,
 ) -> dict:
     """Adjust inventory levels (stock correction, returns, damage).
 
@@ -157,7 +159,9 @@ async def adjust_stock(
         NotFoundError: If product or warehouse not found
     """
     if not settings.feature_inventory:
-        raise ValidationError("Inventory feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Inventory feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         # Validate input
@@ -190,7 +194,7 @@ async def adjust_stock(
         )
         return result
     except Exception as e:
-        logger.error(f"Failed to adjust stock for product {product_id}: {str(e)}")
+        logger.error(f"Failed to adjust stock for product {product_id}: {e!s}")
         raise
 
 
@@ -214,7 +218,9 @@ async def list_warehouses(
         ValidationError: If input validation fails
     """
     if not settings.feature_inventory:
-        raise ValidationError("Inventory feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Inventory feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate pagination
     if limit < 1 or limit > 500:
@@ -232,5 +238,5 @@ async def list_warehouses(
         logger.info(f"Warehouses listed: {len(result.get('data', []))} items")
         return result
     except Exception as e:
-        logger.error(f"Failed to list warehouses: {str(e)}")
+        logger.error(f"Failed to list warehouses: {e!s}")
         raise

@@ -1,15 +1,16 @@
 """Promotional tools and discount management."""
 
 import logging
-from typing import Optional, List
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
     CouponValidationSchema,
     PromotionSchema,
     ValidationError,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +20,8 @@ promotions_mcp = FastMCP(name="Promotions Tools")
 @promotions_mcp.tool
 async def validate_coupon(
     coupon_code: str,
-    order_total: Optional[float] = None,
-    customer_id: Optional[str] = None,
+    order_total: float | None = None,
+    customer_id: str | None = None,
 ) -> dict:
     """Validate and retrieve coupon details.
 
@@ -38,10 +39,13 @@ async def validate_coupon(
         NotFoundError: If coupon not found
     """
     if not settings.feature_promotions:
-        raise ValidationError("Promotions feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Promotions feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         from decimal import Decimal
+
         coupon_data = CouponValidationSchema(
             coupon_code=coupon_code,
             order_total=Decimal(str(order_total)) if order_total else None,
@@ -63,17 +67,19 @@ async def validate_coupon(
             cache=True,
         )
 
-        logger.info(f"Coupon validated: {coupon_code}, applicable={result.get('applicable')}")
+        logger.info(
+            f"Coupon validated: {coupon_code}, applicable={result.get('applicable')}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to validate coupon {coupon_code}: {str(e)}")
+        logger.error(f"Failed to validate coupon {coupon_code}: {e!s}")
         raise
 
 
 @promotions_mcp.tool
 async def list_active_promotions(
-    category: Optional[str] = None,
-    customer_tier: Optional[str] = None,
+    category: str | None = None,
+    customer_tier: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
@@ -94,7 +100,9 @@ async def list_active_promotions(
         ValidationError: If input validation fails
     """
     if not settings.feature_promotions:
-        raise ValidationError("Promotions feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Promotions feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate pagination
     if limit < 1 or limit > 500:
@@ -125,7 +133,7 @@ async def list_active_promotions(
         logger.info(f"Active promotions listed: {len(result.get('data', []))} items")
         return result
     except Exception as e:
-        logger.error(f"Failed to list promotions: {str(e)}")
+        logger.error(f"Failed to list promotions: {e!s}")
         raise
 
 
@@ -149,7 +157,9 @@ async def apply_coupon_to_order(
         ConflictError: If coupon already applied
     """
     if not settings.feature_promotions:
-        raise ValidationError("Promotions feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Promotions feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate inputs
     if not order_id or not isinstance(order_id, str):
@@ -166,7 +176,7 @@ async def apply_coupon_to_order(
         logger.info(f"Coupon applied: order_id={order_id}, code={coupon_code}")
         return result
     except Exception as e:
-        logger.error(f"Failed to apply coupon to order {order_id}: {str(e)}")
+        logger.error(f"Failed to apply coupon to order {order_id}: {e!s}")
         raise
 
 
@@ -177,11 +187,11 @@ async def create_promotion(
     discount_value: float,
     start_date: str,
     end_date: str,
-    applicable_products: Optional[List[int]] = None,
-    applicable_categories: Optional[List[str]] = None,
-    max_uses: Optional[int] = None,
-    customer_tiers: Optional[List[str]] = None,
-    terms: Optional[str] = None,
+    applicable_products: list[int] | None = None,
+    applicable_categories: list[str] | None = None,
+    max_uses: int | None = None,
+    customer_tiers: list[str] | None = None,
+    terms: str | None = None,
 ) -> dict:
     """Create a new promotional campaign (admin).
 
@@ -204,7 +214,9 @@ async def create_promotion(
         ValidationError: If input validation fails
     """
     if not settings.feature_promotions:
-        raise ValidationError("Promotions feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Promotions feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         from datetime import datetime
@@ -245,5 +257,5 @@ async def create_promotion(
         logger.info(f"Promotion created: {result.get('promotion_id')} - {name}")
         return result
     except Exception as e:
-        logger.error(f"Failed to create promotion {name}: {str(e)}")
+        logger.error(f"Failed to create promotion {name}: {e!s}")
         raise

@@ -1,16 +1,15 @@
 """Product search and navigation tools."""
 
 import logging
-from typing import Optional, List
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
     SearchProductsSchema,
     ValidationError,
-    format_success_response,
-    format_paginated_response,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -20,11 +19,11 @@ search_mcp = FastMCP(name="Search Tools")
 @search_mcp.tool
 async def search_products(
     query: str,
-    categories: Optional[List[str]] = None,
-    price_range: Optional[dict] = None,
-    rating_min: Optional[float] = None,
+    categories: list[str] | None = None,
+    price_range: dict | None = None,
+    rating_min: float | None = None,
     in_stock_only: bool = True,
-    brands: Optional[List[str]] = None,
+    brands: list[str] | None = None,
     sort_by: str = "relevance",
     limit: int = 20,
     offset: int = 0,
@@ -49,16 +48,23 @@ async def search_products(
         ValidationError: If input validation fails
     """
     if not settings.feature_search:
-        raise ValidationError("Search feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Search feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         # Convert price_range to Decimal if provided
         from decimal import Decimal
+
         processed_price_range = None
         if price_range:
             processed_price_range = {
-                "min": Decimal(str(price_range["min"])) if price_range.get("min") else None,
-                "max": Decimal(str(price_range["max"])) if price_range.get("max") else None,
+                "min": Decimal(str(price_range["min"]))
+                if price_range.get("min")
+                else None,
+                "max": Decimal(str(price_range["max"]))
+                if price_range.get("max")
+                else None,
             }
 
         # Validate input
@@ -87,7 +93,9 @@ async def search_products(
     if search_data.categories:
         params["categories"] = ",".join(search_data.categories)
 
-    if search_data.price_range and (search_data.price_range.min or search_data.price_range.max):
+    if search_data.price_range and (
+        search_data.price_range.min or search_data.price_range.max
+    ):
         if search_data.price_range.min:
             params["price_min"] = float(search_data.price_range.min)
         if search_data.price_range.max:
@@ -107,10 +115,12 @@ async def search_products(
             timeout=settings.search_timeout,
         )
 
-        logger.info(f"Product search executed: query='{query}', results={len(result.get('results', []))}")
+        logger.info(
+            f"Product search executed: query='{query}', results={len(result.get('results', []))}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Product search failed: query='{query}', error={str(e)}")
+        logger.error(f"Product search failed: query='{query}', error={e!s}")
         raise
 
 
@@ -118,7 +128,7 @@ async def search_products(
 async def get_product_recommendations(
     based_on: str,
     id: str,
-    recommendation_type: Optional[str] = None,
+    recommendation_type: str | None = None,
     limit: int = 10,
 ) -> dict:
     """Get recommended products based on product or customer.
@@ -138,7 +148,9 @@ async def get_product_recommendations(
         NotFoundError: If product or customer not found
     """
     if not settings.feature_search:
-        raise ValidationError("Search feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Search feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate inputs
     if based_on not in ["product_id", "customer_id"]:
@@ -151,9 +163,16 @@ async def get_product_recommendations(
         raise ValidationError("limit must be between 1 and 50")
 
     # Validate recommendation_type if provided
-    valid_types = ["similar", "complementary", "trending_in_category", "frequently_bought_together"]
+    valid_types = [
+        "similar",
+        "complementary",
+        "trending_in_category",
+        "frequently_bought_together",
+    ]
     if recommendation_type and recommendation_type not in valid_types:
-        raise ValidationError(f"recommendation_type must be one of: {', '.join(valid_types)}")
+        raise ValidationError(
+            f"recommendation_type must be one of: {', '.join(valid_types)}"
+        )
 
     params = {
         "based_on": based_on,
@@ -172,16 +191,18 @@ async def get_product_recommendations(
             timeout=settings.search_timeout,
         )
 
-        logger.info(f"Recommendations retrieved: {based_on}={id}, count={len(result.get('data', []))}")
+        logger.info(
+            f"Recommendations retrieved: {based_on}={id}, count={len(result.get('data', []))}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to get recommendations for {based_on}={id}: {str(e)}")
+        logger.error(f"Failed to get recommendations for {based_on}={id}: {e!s}")
         raise
 
 
 @search_mcp.tool
 async def get_categories(
-    parent_category: Optional[str] = None,
+    parent_category: str | None = None,
     include_product_count: bool = False,
 ) -> dict:
     """Retrieve product category hierarchy.
@@ -199,7 +220,9 @@ async def get_categories(
         NotFoundError: If parent category not found
     """
     if not settings.feature_search:
-        raise ValidationError("Search feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Search feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     params = {
         "include_product_count": include_product_count,
@@ -218,9 +241,11 @@ async def get_categories(
             timeout=settings.search_timeout,
         )
 
-        category_count = len(result.get('data', [])) if isinstance(result.get('data'), list) else 1
+        category_count = (
+            len(result.get("data", [])) if isinstance(result.get("data"), list) else 1
+        )
         logger.info(f"Categories retrieved: count={category_count}")
         return result
     except Exception as e:
-        logger.error(f"Failed to retrieve categories: {str(e)}")
+        logger.error(f"Failed to retrieve categories: {e!s}")
         raise

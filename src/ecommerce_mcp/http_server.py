@@ -1,13 +1,12 @@
 """Serve the ecommerce MCP protocol and existing REST endpoints."""
 
-from typing import Any, Dict
+from typing import Any
 
-from fastapi import FastAPI, HTTPException
 import uvicorn
+from fastapi import FastAPI, HTTPException
 
-from src.ecommerce_mcp.main import mcp
 from src.ecommerce_mcp.config import settings
-
+from src.ecommerce_mcp.main import mcp
 
 # Create the Streamable HTTP MCP endpoint and initialize its session manager
 # through the parent application's lifespan.
@@ -29,7 +28,10 @@ async def health():
 @app.get("/ready")
 async def ready():
     """Readiness check endpoint."""
-    return {"status": "ready", "message": "Ecommerce MCP HTTP Server is ready to serve requests"}
+    return {
+        "status": "ready",
+        "message": "Ecommerce MCP HTTP Server is ready to serve requests",
+    }
 
 
 @app.get("/tools")
@@ -52,17 +54,17 @@ async def list_tools():
 
 
 @app.post("/tools/{tool_name}/call")
-async def call_tool(tool_name: str, args: Dict[str, Any]):
+async def call_tool(tool_name: str, args: dict[str, Any]):
     """Call a specific MCP tool through the existing REST interface."""
     try:
         result = await mcp.call_tool(tool_name, args)
         return {"success": True, "result": result}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Tool call failed: {str(e)}") from e
+        raise HTTPException(status_code=400, detail=f"Tool call failed: {e!s}") from e
 
 
 @app.post("/call")
-async def call_tool_from_body(request_body: Dict[str, Any]):
+async def call_tool_from_body(request_body: dict[str, Any]):
     """Call a tool via a request body containing 'tool' and 'args' keys."""
     try:
         tool_name = request_body.get("tool")
@@ -76,7 +78,7 @@ async def call_tool_from_body(request_body: Dict[str, Any]):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Tool call failed: {str(e)}") from e
+        raise HTTPException(status_code=400, detail=f"Tool call failed: {e!s}") from e
 
 
 # Mount last so the REST routes above take priority. The child application

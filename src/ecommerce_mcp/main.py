@@ -1,18 +1,19 @@
 from fastmcp import FastMCP
-from src.ecommerce_mcp.tools.customers import customer_mcp
-from src.ecommerce_mcp.tools.orders import order_mcp
-from src.ecommerce_mcp.tools.products import product_mcp
-from src.ecommerce_mcp.tools.reviews import review_mcp
-from src.ecommerce_mcp.tools.tickets import ticket_mcp
-from src.ecommerce_mcp.tools.payments import payment_mcp
-from src.ecommerce_mcp.tools.shipping import shipping_mcp
-from src.ecommerce_mcp.tools.inventory import inventory_mcp
-from src.ecommerce_mcp.tools.search import search_mcp
-from src.ecommerce_mcp.tools.promotions import promotions_mcp
+
 from src.ecommerce_mcp.tools.analytics import analytics_mcp
-from src.ecommerce_mcp.tools.communication import communication_mcp
-from src.ecommerce_mcp.tools.returns import returns_mcp
 from src.ecommerce_mcp.tools.batch import batch_mcp
+from src.ecommerce_mcp.tools.communication import communication_mcp
+from src.ecommerce_mcp.tools.customers import customer_mcp
+from src.ecommerce_mcp.tools.inventory import inventory_mcp
+from src.ecommerce_mcp.tools.orders import order_mcp
+from src.ecommerce_mcp.tools.payments import payment_mcp
+from src.ecommerce_mcp.tools.products import product_mcp
+from src.ecommerce_mcp.tools.promotions import promotions_mcp
+from src.ecommerce_mcp.tools.returns import returns_mcp
+from src.ecommerce_mcp.tools.reviews import review_mcp
+from src.ecommerce_mcp.tools.search import search_mcp
+from src.ecommerce_mcp.tools.shipping import shipping_mcp
+from src.ecommerce_mcp.tools.tickets import ticket_mcp
 
 mcp = FastMCP(
     name="Ecommerce MCP",

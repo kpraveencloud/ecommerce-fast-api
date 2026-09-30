@@ -1,17 +1,16 @@
 """Payment processing and management tools."""
 
 import logging
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
     PaymentSchema,
     RefundSchema,
     ValidationError,
-    format_success_response,
-    format_error_response,
-    format_transaction_response,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ async def process_payment(
     currency: str,
     payment_method: str,
     payment_details: dict,
-    idempotency_key: str = None,
+    idempotency_key: str | None = None,
 ) -> dict:
     """Process a payment transaction for an order.
 
@@ -47,11 +46,14 @@ async def process_payment(
         TimeoutError: If payment processor timeout
     """
     if not settings.feature_payments:
-        raise ValidationError("Payment feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Payment feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         # Validate input
         from decimal import Decimal
+
         payment_data = PaymentSchema(
             order_id=order_id,
             amount=Decimal(str(amount)),
@@ -78,10 +80,12 @@ async def process_payment(
             timeout=settings.payment_timeout,
         )
 
-        logger.info(f"Payment processed: {result.get('transaction_id')} for order {order_id}")
+        logger.info(
+            f"Payment processed: {result.get('transaction_id')} for order {order_id}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Payment processing failed for order {order_id}: {str(e)}")
+        logger.error(f"Payment processing failed for order {order_id}: {e!s}")
         raise
 
 
@@ -112,16 +116,16 @@ async def get_payment_status(transaction_id: str) -> dict:
         logger.info(f"Payment status retrieved: {transaction_id}")
         return result
     except Exception as e:
-        logger.error(f"Failed to get payment status for {transaction_id}: {str(e)}")
+        logger.error(f"Failed to get payment status for {transaction_id}: {e!s}")
         raise
 
 
 @payment_mcp.tool
 async def refund_payment(
     transaction_id: str,
-    amount: float = None,
+    amount: float | None = None,
     reason: str = "customer_request",
-    notes: str = None,
+    notes: str | None = None,
 ) -> dict:
     """Initiate a refund for a completed payment.
 
@@ -140,11 +144,14 @@ async def refund_payment(
         NotFoundError: If transaction not found
     """
     if not settings.feature_payments:
-        raise ValidationError("Payment feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Payment feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         # Validate input
         from decimal import Decimal
+
         refund_data = RefundSchema(
             transaction_id=transaction_id,
             amount=Decimal(str(amount)) if amount else None,
@@ -165,10 +172,12 @@ async def refund_payment(
             timeout=settings.payment_timeout,
         )
 
-        logger.info(f"Refund initiated: {result.get('refund_id')} for transaction {transaction_id}")
+        logger.info(
+            f"Refund initiated: {result.get('refund_id')} for transaction {transaction_id}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Refund failed for transaction {transaction_id}: {str(e)}")
+        logger.error(f"Refund failed for transaction {transaction_id}: {e!s}")
         raise
 
 
@@ -212,7 +221,9 @@ async def list_payment_methods(
         logger.info(f"Payment methods retrieved for customer {customer_id}")
         return result
     except Exception as e:
-        logger.error(f"Failed to list payment methods for customer {customer_id}: {str(e)}")
+        logger.error(
+            f"Failed to list payment methods for customer {customer_id}: {e!s}"
+        )
         raise
 
 
@@ -240,7 +251,9 @@ async def add_payment_method(
         ConflictError: If payment method already exists
     """
     if not settings.feature_payments:
-        raise ValidationError("Payment feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Payment feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate inputs
     if not customer_id or not isinstance(customer_id, str):
@@ -263,8 +276,10 @@ async def add_payment_method(
             },
         )
 
-        logger.info(f"Payment method added for customer {customer_id}: {result.get('method_id')}")
+        logger.info(
+            f"Payment method added for customer {customer_id}: {result.get('method_id')}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to add payment method for customer {customer_id}: {str(e)}")
+        logger.error(f"Failed to add payment method for customer {customer_id}: {e!s}")
         raise

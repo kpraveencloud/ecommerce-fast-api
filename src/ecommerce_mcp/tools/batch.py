@@ -1,16 +1,17 @@
 """Batch operations and bulk import tools."""
 
 import logging
-from typing import Optional, List, Dict, Any
+from typing import Any
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
     BulkImportProductsSchema,
     BulkUpdateOrdersSchema,
     ValidationError,
-    format_batch_response,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,9 @@ batch_mcp = FastMCP(name="Batch Tools")
 
 @batch_mcp.tool
 async def import_bulk_products(
-    products: List[dict],
+    products: list[dict],
     update_existing: bool = False,
-    file_source: Optional[str] = None,
+    file_source: str | None = None,
 ) -> dict:
     """Import multiple products via CSV or structured data.
 
@@ -38,7 +39,9 @@ async def import_bulk_products(
         ValidationError: If input validation fails
     """
     if not settings.feature_batch:
-        raise ValidationError("Batch feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Batch feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         import_data = BulkImportProductsSchema(
@@ -81,16 +84,16 @@ async def import_bulk_products(
         )
         return result
     except Exception as e:
-        logger.error(f"Failed to import products: {str(e)}")
+        logger.error(f"Failed to import products: {e!s}")
         raise
 
 
 @batch_mcp.tool
 async def bulk_update_orders(
-    order_ids: List[str],
-    status: Optional[str] = None,
-    tags: Optional[List[str]] = None,
-    custom_fields: Optional[Dict[str, Any]] = None,
+    order_ids: list[str],
+    status: str | None = None,
+    tags: list[str] | None = None,
+    custom_fields: dict[str, Any] | None = None,
 ) -> dict:
     """Bulk update order statuses or properties.
 
@@ -107,7 +110,9 @@ async def bulk_update_orders(
         ValidationError: If input validation fails
     """
     if not settings.feature_batch:
-        raise ValidationError("Batch feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Batch feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         update_data = BulkUpdateOrdersSchema(
@@ -125,7 +130,9 @@ async def bulk_update_orders(
 
     # Validate we have at least one update field
     if not status and not tags and not custom_fields:
-        raise ValidationError("At least one of status, tags, or custom_fields must be provided")
+        raise ValidationError(
+            "At least one of status, tags, or custom_fields must be provided"
+        )
 
     try:
         result = await api_client.post(
@@ -144,5 +151,5 @@ async def bulk_update_orders(
         )
         return result
     except Exception as e:
-        logger.error(f"Failed to update orders: {str(e)}")
+        logger.error(f"Failed to update orders: {e!s}")
         raise

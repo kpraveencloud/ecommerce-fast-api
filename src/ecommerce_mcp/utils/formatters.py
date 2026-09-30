@@ -1,7 +1,8 @@
 """Response formatting utilities."""
 
-from typing import Any, List, Optional
-from datetime import datetime
+from datetime import UTC, datetime
+from typing import Any
+
 from .error_handler import EcommerceMCPError
 
 
@@ -11,7 +12,7 @@ def format_success_response(data: Any, message: str = "Success") -> dict:
         "status": "success",
         "message": message,
         "data": data,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -22,12 +23,12 @@ def format_error_response(error: EcommerceMCPError) -> dict:
         "error_code": error.error_code,
         "message": error.message,
         "details": error.details,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
 def format_paginated_response(
-    items: List[Any],
+    items: list[Any],
     limit: int,
     offset: int,
     total: int,
@@ -45,13 +46,13 @@ def format_paginated_response(
             "has_more": offset + limit < total,
             "page": offset // limit + 1 if limit > 0 else 1,
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
 def format_cursor_paginated_response(
-    items: List[Any],
-    next_cursor: Optional[str] = None,
+    items: list[Any],
+    next_cursor: str | None = None,
     has_more: bool = False,
     message: str = "Success",
 ) -> dict:
@@ -64,14 +65,14 @@ def format_cursor_paginated_response(
             "next_cursor": next_cursor,
             "has_more": has_more,
         },
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
 def format_batch_response(
     updated_count: int,
     failed_count: int,
-    errors: Optional[List[dict]] = None,
+    errors: list[dict] | None = None,
     message: str = "Batch operation completed",
 ) -> dict:
     """Wrap batch operation response."""
@@ -89,7 +90,7 @@ def format_batch_response(
             ),
         },
         "errors": errors or [],
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
     }
 
 
@@ -98,7 +99,7 @@ def format_transaction_response(
     status: str,
     amount: float,
     currency: str = "USD",
-    confirmation_code: Optional[str] = None,
+    confirmation_code: str | None = None,
 ) -> dict:
     """Format transaction response."""
     return format_success_response(
@@ -108,7 +109,7 @@ def format_transaction_response(
             "amount": amount,
             "currency": currency,
             "confirmation_code": confirmation_code,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
     )
 
@@ -116,9 +117,9 @@ def format_transaction_response(
 def format_shipment_response(
     shipment_id: str,
     status: str,
-    tracking_number: Optional[str] = None,
-    carrier: Optional[str] = None,
-    estimated_delivery: Optional[str] = None,
+    tracking_number: str | None = None,
+    carrier: str | None = None,
+    estimated_delivery: str | None = None,
 ) -> dict:
     """Format shipment response."""
     return format_success_response(
@@ -128,6 +129,6 @@ def format_shipment_response(
             "tracking_number": tracking_number,
             "carrier": carrier,
             "estimated_delivery": estimated_delivery,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
     )

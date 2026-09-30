@@ -1,15 +1,17 @@
 """Analytics and reporting tools."""
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
-    SalesMetricsSchema,
     ExportReportSchema,
+    SalesMetricsSchema,
     ValidationError,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +21,9 @@ analytics_mcp = FastMCP(name="Analytics Tools")
 @analytics_mcp.tool
 async def get_sales_metrics(
     period: str,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    breakdown_by: Optional[str] = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    breakdown_by: str | None = None,
 ) -> dict:
     """Retrieve sales performance metrics.
 
@@ -39,7 +41,9 @@ async def get_sales_metrics(
         ValidationError: If input validation fails
     """
     if not settings.feature_analytics:
-        raise ValidationError("Analytics feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Analytics feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         from datetime import datetime
@@ -68,10 +72,12 @@ async def get_sales_metrics(
             cache=True,
         )
 
-        logger.info(f"Sales metrics retrieved: period={period}, revenue={result.get('total_revenue')}")
+        logger.info(
+            f"Sales metrics retrieved: period={period}, revenue={result.get('total_revenue')}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to get sales metrics: {str(e)}")
+        logger.error(f"Failed to get sales metrics: {e!s}")
         raise
 
 
@@ -96,7 +102,9 @@ async def get_customer_analytics(
         ValidationError: If input validation fails
     """
     if not settings.feature_analytics:
-        raise ValidationError("Analytics feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Analytics feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate period
     valid_periods = ["month", "quarter", "year"]
@@ -119,7 +127,7 @@ async def get_customer_analytics(
         logger.info(f"Customer analytics retrieved: period={period}")
         return result
     except Exception as e:
-        logger.error(f"Failed to get customer analytics: {str(e)}")
+        logger.error(f"Failed to get customer analytics: {e!s}")
         raise
 
 
@@ -128,7 +136,7 @@ async def export_report(
     report_type: str,
     format: str,
     period: str,
-    filters: Optional[Dict[str, Any]] = None,
+    filters: dict[str, Any] | None = None,
 ) -> dict:
     """Generate and export report in CSV or PDF format.
 
@@ -145,7 +153,9 @@ async def export_report(
         ValidationError: If input validation fails
     """
     if not settings.feature_analytics:
-        raise ValidationError("Analytics feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Analytics feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         report_data = ExportReportSchema(
@@ -168,8 +178,10 @@ async def export_report(
             },
         )
 
-        logger.info(f"Report exported: {result.get('report_id')} ({report_type}, {format})")
+        logger.info(
+            f"Report exported: {result.get('report_id')} ({report_type}, {format})"
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to export report: {str(e)}")
+        logger.error(f"Failed to export report: {e!s}")
         raise

@@ -1,16 +1,15 @@
 """Shipping and fulfillment management tools."""
 
 import logging
-from typing import Optional, List
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
     CreateShipmentSchema,
     ValidationError,
-    format_success_response,
-    format_paginated_response,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,9 @@ async def get_shipment(shipment_id: str) -> dict:
         NotFoundError: If shipment not found
     """
     if not settings.feature_shipping:
-        raise ValidationError("Shipping feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Shipping feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     if not shipment_id or not isinstance(shipment_id, str):
         raise ValidationError("shipment_id must be a non-empty string")
@@ -49,16 +50,16 @@ async def get_shipment(shipment_id: str) -> dict:
         logger.info(f"Shipment details retrieved: {shipment_id}")
         return result
     except Exception as e:
-        logger.error(f"Failed to get shipment {shipment_id}: {str(e)}")
+        logger.error(f"Failed to get shipment {shipment_id}: {e!s}")
         raise
 
 
 @shipping_mcp.tool
 async def list_shipments(
-    order_id: Optional[str] = None,
-    customer_id: Optional[str] = None,
-    status: Optional[str] = None,
-    carrier: Optional[str] = None,
+    order_id: str | None = None,
+    customer_id: str | None = None,
+    status: str | None = None,
+    carrier: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
@@ -79,7 +80,9 @@ async def list_shipments(
         ValidationError: If input validation fails
     """
     if not settings.feature_shipping:
-        raise ValidationError("Shipping feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Shipping feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate pagination
     if limit < 1 or limit > 500:
@@ -88,7 +91,14 @@ async def list_shipments(
         raise ValidationError("offset must be >= 0")
 
     # Validate status if provided
-    valid_statuses = ["pending", "shipped", "in_transit", "delivered", "delayed", "returned"]
+    valid_statuses = [
+        "pending",
+        "shipped",
+        "in_transit",
+        "delivered",
+        "delayed",
+        "returned",
+    ]
     if status and status not in valid_statuses:
         raise ValidationError(f"status must be one of: {', '.join(valid_statuses)}")
 
@@ -118,14 +128,14 @@ async def list_shipments(
         logger.info(f"Shipments listed: {len(result.get('data', []))} items")
         return result
     except Exception as e:
-        logger.error(f"Failed to list shipments: {str(e)}")
+        logger.error(f"Failed to list shipments: {e!s}")
         raise
 
 
 @shipping_mcp.tool
 async def create_shipment(
     order_id: str,
-    items: List[dict],
+    items: list[dict],
     carrier: str,
     shipping_address: dict,
     shipping_method: str,
@@ -150,7 +160,9 @@ async def create_shipment(
         NotFoundError: If order or products not found
     """
     if not settings.feature_shipping:
-        raise ValidationError("Shipping feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Shipping feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         # Validate input
@@ -179,10 +191,12 @@ async def create_shipment(
             timeout=settings.shipping_timeout,
         )
 
-        logger.info(f"Shipment created: {result.get('shipment_id')} for order {order_id}")
+        logger.info(
+            f"Shipment created: {result.get('shipment_id')} for order {order_id}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to create shipment for order {order_id}: {str(e)}")
+        logger.error(f"Failed to create shipment for order {order_id}: {e!s}")
         raise
 
 
@@ -190,8 +204,8 @@ async def create_shipment(
 async def update_shipment_status(
     shipment_id: str,
     status: str,
-    tracking_update: Optional[dict] = None,
-    notes: Optional[str] = None,
+    tracking_update: dict | None = None,
+    notes: str | None = None,
 ) -> dict:
     """Update shipment status (manual or webhook-based).
 
@@ -209,10 +223,18 @@ async def update_shipment_status(
         NotFoundError: If shipment not found
     """
     if not settings.feature_shipping:
-        raise ValidationError("Shipping feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Shipping feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate status
-    valid_statuses = ["shipped", "in_transit", "out_for_delivery", "delivered", "exception"]
+    valid_statuses = [
+        "shipped",
+        "in_transit",
+        "out_for_delivery",
+        "delivered",
+        "exception",
+    ]
     if status not in valid_statuses:
         raise ValidationError(f"status must be one of: {', '.join(valid_statuses)}")
 
@@ -225,7 +247,9 @@ async def update_shipment_status(
             raise ValidationError("tracking_update must be a dict")
         required_fields = ["timestamp", "location", "event_type"]
         if not all(field in tracking_update for field in required_fields):
-            raise ValidationError(f"tracking_update must contain: {', '.join(required_fields)}")
+            raise ValidationError(
+                f"tracking_update must contain: {', '.join(required_fields)}"
+            )
 
     try:
         result = await api_client.put(
@@ -241,5 +265,5 @@ async def update_shipment_status(
         logger.info(f"Shipment status updated: {shipment_id} -> {status}")
         return result
     except Exception as e:
-        logger.error(f"Failed to update shipment {shipment_id}: {str(e)}")
+        logger.error(f"Failed to update shipment {shipment_id}: {e!s}")
         raise

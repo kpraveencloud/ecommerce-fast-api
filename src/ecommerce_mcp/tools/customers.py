@@ -1,4 +1,5 @@
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
 
 customer_mcp = FastMCP(name="Customer Tools")

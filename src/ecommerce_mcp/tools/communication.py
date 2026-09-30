@@ -1,15 +1,17 @@
 """Customer communication and notification tools."""
 
 import logging
-from typing import Optional, Dict, Any
+from typing import Any
+
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
+from src.ecommerce_mcp.config import settings
 from src.ecommerce_mcp.utils import (
-    EmailSchema,
     ContactPreferencesSchema,
+    EmailSchema,
     ValidationError,
 )
-from src.ecommerce_mcp.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +24,8 @@ async def send_customer_email(
     email_type: str,
     subject: str,
     body: str,
-    template_id: Optional[str] = None,
-    template_variables: Optional[Dict[str, Any]] = None,
+    template_id: str | None = None,
+    template_variables: dict[str, Any] | None = None,
 ) -> dict:
     """Send email notification to customer.
 
@@ -44,7 +46,9 @@ async def send_customer_email(
         NotFoundError: If customer not found
     """
     if not settings.feature_communication:
-        raise ValidationError("Communication feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Communication feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         email_data = EmailSchema(
@@ -74,15 +78,15 @@ async def send_customer_email(
         logger.info(f"Email sent: {result.get('email_id')} to customer {customer_id}")
         return result
     except Exception as e:
-        logger.error(f"Failed to send email to customer {customer_id}: {str(e)}")
+        logger.error(f"Failed to send email to customer {customer_id}: {e!s}")
         raise
 
 
 @communication_mcp.tool
 async def list_customer_notifications(
     customer_id: str,
-    notification_type: Optional[str] = None,
-    status: Optional[str] = None,
+    notification_type: str | None = None,
+    status: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> dict:
@@ -104,7 +108,9 @@ async def list_customer_notifications(
         NotFoundError: If customer not found
     """
     if not settings.feature_communication:
-        raise ValidationError("Communication feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Communication feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     # Validate pagination
     if limit < 1 or limit > 500:
@@ -118,7 +124,9 @@ async def list_customer_notifications(
     # Validate notification_type if provided
     valid_types = ["email", "sms", "push", "in_app"]
     if notification_type and notification_type not in valid_types:
-        raise ValidationError(f"notification_type must be one of: {', '.join(valid_types)}")
+        raise ValidationError(
+            f"notification_type must be one of: {', '.join(valid_types)}"
+        )
 
     # Validate status if provided
     valid_statuses = ["sent", "delivered", "opened", "clicked", "bounced"]
@@ -138,21 +146,23 @@ async def list_customer_notifications(
             cache=True,
         )
 
-        logger.info(f"Notifications retrieved: customer={customer_id}, count={len(result.get('data', []))}")
+        logger.info(
+            f"Notifications retrieved: customer={customer_id}, count={len(result.get('data', []))}"
+        )
         return result
     except Exception as e:
-        logger.error(f"Failed to list notifications for customer {customer_id}: {str(e)}")
+        logger.error(f"Failed to list notifications for customer {customer_id}: {e!s}")
         raise
 
 
 @communication_mcp.tool
 async def update_contact_preferences(
     customer_id: str,
-    email_promotional: Optional[bool] = None,
-    email_updates: Optional[bool] = None,
-    sms_notifications: Optional[bool] = None,
-    push_notifications: Optional[bool] = None,
-    frequency: Optional[str] = None,
+    email_promotional: bool | None = None,
+    email_updates: bool | None = None,
+    sms_notifications: bool | None = None,
+    push_notifications: bool | None = None,
+    frequency: str | None = None,
 ) -> dict:
     """Update customer's communication preferences.
 
@@ -172,7 +182,9 @@ async def update_contact_preferences(
         NotFoundError: If customer not found
     """
     if not settings.feature_communication:
-        raise ValidationError("Communication feature is disabled", error_code="FEATURE_DISABLED")
+        raise ValidationError(
+            "Communication feature is disabled", error_code="FEATURE_DISABLED"
+        )
 
     try:
         preferences_data = ContactPreferencesSchema(
@@ -201,5 +213,5 @@ async def update_contact_preferences(
         logger.info(f"Contact preferences updated: customer={customer_id}")
         return result
     except Exception as e:
-        logger.error(f"Failed to update preferences for customer {customer_id}: {str(e)}")
+        logger.error(f"Failed to update preferences for customer {customer_id}: {e!s}")
         raise

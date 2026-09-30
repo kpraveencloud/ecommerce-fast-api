@@ -1,4 +1,5 @@
 from fastmcp import FastMCP
+
 from src.ecommerce_mcp.client import api_client
 
 ticket_mcp = FastMCP(name="Ticket Tools")
